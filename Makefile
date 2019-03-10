@@ -30,4 +30,4 @@ receiver: receiver.o
 	$(CXX) $(CXXFLAGS) -o receiver receiver.o
 
 clean:
-	$(RM) sender.o sender
+	$(RM) sender.o sender receiver.o receiver
