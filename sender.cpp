@@ -1,5 +1,6 @@
 #include <sender.h>
 #include <iostream>
+#include <sstream>
 
 #include <string.h>
 
@@ -8,22 +9,6 @@
 #include <netdb.h>
 
 #include <arpa/inet.h>
-
-/*int getaddrinfo(const char *node,     // e.g. "www.example.com" or IP
-                const char *service,  // e.g. "http" or port number
-                const struct addrinfo *hints,
-                struct addrinfo **res);*/
-
-/*           struct addrinfo {
-               int              ai_flags;
-               int              ai_family;
-               int              ai_socktype;
-               int              ai_protocol;
-               socklen_t        ai_addrlen;
-               struct sockaddr *ai_addr;
-               char            *ai_canonname;
-               struct addrinfo *ai_next;
-           };*/
 
 int main(int argc, char* argv[])
 {
@@ -48,7 +33,7 @@ int main(int argc, char* argv[])
     printf("IP addresses for host %s on port %s:\n\n", argv[1], argv[2]);
 
     int sockFd;
-    for(p = res;p != NULL; p = p->ai_next) {
+    for (p = res; p != NULL; p = p->ai_next) {
         void *addr;
         std::string str;
 
@@ -72,12 +57,10 @@ int main(int argc, char* argv[])
             std::cout << "didn't make socket and errno is " << errno << std::endl;
             return 3;
         } else {
-            std::cout << "made socket, fd is " << sockFd << std::endl;
             if ((status = bind(sockFd, p->ai_addr, p->ai_addrlen)) < 0) {
                 std::cout << "didn't bind socket and errno is " << errno << std::endl;
                 return 4;
             } else {
-                std::cout << "bound socket" << std::endl;
                 break;
             }
         }
@@ -106,56 +89,59 @@ int main(int argc, char* argv[])
 
     // ready to communicate on socket descriptor new_fd!
 
-    std::string read;
+    std::cout  << "enter circle data: [radius] [x] [y] [color]" << std::endl;
+
+    uint32_t type = 1;
+    std::cout << "type is " << type << std::endl;
+    uint32_t typeN = htonl(type);
+    std::cout << "typeN is " << typeN << std::endl;
+    uint32_t infoArray[5]; // type + radius, x, y, color;
+    uint32_t networkArray[5]; // type + radiusN, xN, yN, colorN;
+    networkArray[0] = typeN;
+
+    uint8_t buffer[20]; // four bytes for each of the four things + 4 for a type
+    std::string line;
+    std::string token;
     while (1) {
-        std::cin >> read;
-        if (read.size() > 99) {
-            std::cout << "only 99 characters allowed" << std::endl;
-            continue;
+        getline(std::cin, line);
+        std::cout << "line is " << line << std::endl;
+
+        std::istringstream iss(line);
+
+        int i = 1;
+        while (getline(iss, token, ' ')) {
+            if (i > 4) { std::cout << "uh oh!" << std::endl; return 7; }
+            std::cout << token << std::endl;
+            if (token.find("0x") == 0) {
+                infoArray[i] = strtol(token.c_str(), NULL, 16);
+            } else {
+                infoArray[i] = strtol(token.c_str(), NULL, 10);
+            }
+            i++;
         }
 
-        send(new_fd, read.c_str(), read.size() + 1, 0);
-        if (read.compare("end") == 0) {
-            std::cout << "last transmission" << std::endl;
-            break;
+        for (int i = 0; i < 4; i++) {
+            std::cout << "infoArray [" << i + 1 << "] is " << infoArray[i + 1] << std::endl;
+            networkArray[i + 1] = htonl(infoArray[i + 1]);
         }
+
+        for (int i = 0; i < 5; i++) {
+            int startIndex = i * 4;
+            buffer[startIndex++] = networkArray[i] & 0xff;
+            std::cout << "stratIndex is " << startIndex << std::endl;
+            buffer[startIndex++] = (networkArray[i] & 0xff00) >> 8;
+            std::cout << "stratIndex is " << startIndex << std::endl;
+            buffer[startIndex++] = (networkArray[i] & 0xff0000) >> 16;
+            std::cout << "stratIndex is " << startIndex << std::endl;
+            buffer[startIndex++] = (networkArray[i] & 0xff000000) >> 24;
+            std::cout << "stratIndex is " << startIndex << std::endl;
+        }
+
+        int bytesSent = send(new_fd, buffer, 20, 0);
+        std::cout << "bytesSetn is " << bytesSent << std::endl;
     }
 
     freeaddrinfo(res); // free the linked list
 
     return 0;
 }
-
-/*
-
-    int status;
-    struct addrinfo hints;
-    struct addrinfo *servinfo;  // will point to the results
-
-    memset(&hints, 0, sizeof hints); // make sure the struct is empty
-    hints.ai_family = AF_UNSPEC;     // don't care IPv4 or IPv6
-    hints.ai_socktype = SOCK_STREAM; // TCP stream sockets
-    hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
-
-    if ((status = getaddrinfo(NULL, "3490", &hints, &servinfo)) != 0) {
-        fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
-        exit(1);
-    }
-
-    // servinfo now points to a linked list of 1 or more struct addrinfos
-
-    int i = 0;
-    while (servinfo) {
-        i++;
-        servinfo = servinfo->ai_next;
-        std::cout << "ai_canonname is " << servinfo->ai_canonname << std::endl;
-    }
-    std::cout << "i is " << i << std::endl;
-
-
-    // ... do everything until you don't need servinfo anymore ....
-
-    freeaddrinfo(servinfo); // free the linked-list
-
-    return 0;
-}*/
