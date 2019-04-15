@@ -10,8 +10,61 @@
 
 #include <arpa/inet.h>
 
+#include <thread>
+
+#include <unistd.h>
+
+void send_func(int new_fd)
+{
+    std::cout  << "enter circle data: [radius] [x] [y] [color]" << std::endl;
+
+    uint32_t type = 1;
+    uint32_t typeN = htonl(type);
+    uint32_t infoArray[5]; // type + radius, x, y, color;
+    uint32_t networkArray[5]; // type + radiusN, xN, yN, colorN;
+    networkArray[0] = typeN;
+
+    uint8_t buffer[20]; // four bytes for each of the four things + 4 for a type
+    std::string line;
+    std::string token;
+    while (1) {
+        getline(std::cin, line);
+
+        std::istringstream iss(line);
+
+        int i = 1;
+        while (getline(iss, token, ' ')) {
+            if (i > 4) { std::cout << "uh oh!" << std::endl; /*return 7;*/ }
+            if (token.find("0x") == 0) {
+                infoArray[i] = strtol(token.c_str(), NULL, 16);
+            } else {
+                infoArray[i] = strtol(token.c_str(), NULL, 10);
+            }
+            i++;
+        }
+
+        for (int i = 0; i < 4; i++) {
+            networkArray[i + 1] = htonl(infoArray[i + 1]);
+        }
+
+        for (int i = 0; i < 5; i++) {
+            int startIndex = i * 4;
+            buffer[startIndex++] = networkArray[i] & 0xff;
+            buffer[startIndex++] = (networkArray[i] & 0xff00) >> 8;
+            buffer[startIndex++] = (networkArray[i] & 0xff0000) >> 16;
+            buffer[startIndex++] = (networkArray[i] & 0xff000000) >> 24;
+        }
+
+        int bytesSent = send(new_fd, buffer, 20, 0);
+        (void)bytesSent;
+    }
+}
+
 int main(int argc, char* argv[])
 {
+    unsigned int n = std::thread::hardware_concurrency();
+    std::cout << n << " concurrent threads are supported.\n";
+
     struct addrinfo hints, *res, *p;
     int status;
     char ipstr[INET6_ADDRSTRLEN];
@@ -21,6 +74,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    // clear and prepare hints
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC; // AF_INET or AF_INET6 to force version
     hints.ai_socktype = SOCK_STREAM;
@@ -72,8 +126,6 @@ int main(int argc, char* argv[])
         return 5;
     }
 
-
-
     struct sockaddr_storage their_addr;
     socklen_t addr_size;
     int new_fd;
@@ -88,59 +140,14 @@ int main(int argc, char* argv[])
     }
 
     // ready to communicate on socket descriptor new_fd!
+    std::thread sender(&send_func, new_fd);
 
-    std::cout  << "enter circle data: [radius] [x] [y] [color]" << std::endl;
-
-    uint32_t type = 1;
-    std::cout << "type is " << type << std::endl;
-    uint32_t typeN = htonl(type);
-    std::cout << "typeN is " << typeN << std::endl;
-    uint32_t infoArray[5]; // type + radius, x, y, color;
-    uint32_t networkArray[5]; // type + radiusN, xN, yN, colorN;
-    networkArray[0] = typeN;
-
-    uint8_t buffer[20]; // four bytes for each of the four things + 4 for a type
-    std::string line;
-    std::string token;
     while (1) {
-        getline(std::cin, line);
-        std::cout << "line is " << line << std::endl;
-
-        std::istringstream iss(line);
-
-        int i = 1;
-        while (getline(iss, token, ' ')) {
-            if (i > 4) { std::cout << "uh oh!" << std::endl; return 7; }
-            std::cout << token << std::endl;
-            if (token.find("0x") == 0) {
-                infoArray[i] = strtol(token.c_str(), NULL, 16);
-            } else {
-                infoArray[i] = strtol(token.c_str(), NULL, 10);
-            }
-            i++;
-        }
-
-        for (int i = 0; i < 4; i++) {
-            std::cout << "infoArray [" << i + 1 << "] is " << infoArray[i + 1] << std::endl;
-            networkArray[i + 1] = htonl(infoArray[i + 1]);
-        }
-
-        for (int i = 0; i < 5; i++) {
-            int startIndex = i * 4;
-            buffer[startIndex++] = networkArray[i] & 0xff;
-            std::cout << "stratIndex is " << startIndex << std::endl;
-            buffer[startIndex++] = (networkArray[i] & 0xff00) >> 8;
-            std::cout << "stratIndex is " << startIndex << std::endl;
-            buffer[startIndex++] = (networkArray[i] & 0xff0000) >> 16;
-            std::cout << "stratIndex is " << startIndex << std::endl;
-            buffer[startIndex++] = (networkArray[i] & 0xff000000) >> 24;
-            std::cout << "stratIndex is " << startIndex << std::endl;
-        }
-
-        int bytesSent = send(new_fd, buffer, 20, 0);
-        std::cout << "bytesSetn is " << bytesSent << std::endl;
+        // wait to get canceled
     }
 
+    close(sockFd);
+    close(new_fd);
     freeaddrinfo(res); // free the linked list
 
     return 0;

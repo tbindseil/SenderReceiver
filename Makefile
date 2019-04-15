@@ -11,7 +11,7 @@ CPPFLAGS=$(ALLFLAGS)
 CXXFLAGS=$(ALLFLAGS)
 LDFLAGS=$(ALLFLAGS)
 
-LDLIBS=
+LDFLAGS=-pthread
 
 INC=./
 
@@ -21,13 +21,13 @@ sender.o: sender.cpp sender.h
 	$(CXX) $(CXXFLAGS) -c -I$(INC) sender.cpp
 
 sender: sender.o
-	$(CXX) $(CXXFLAGS) -o sender sender.o
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) -o sender sender.o
 
 receiver.o: receiver.cpp receiver.h
 	$(CXX) $(CXXFLAGS) -c -I$(INC) receiver.cpp
 
 receiver: receiver.o
-	$(CXX) $(CXXFLAGS) -o receiver receiver.o
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) -o receiver receiver.o
 
 clean:
 	$(RM) sender.o sender receiver.o receiver
