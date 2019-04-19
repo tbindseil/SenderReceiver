@@ -14,38 +14,98 @@
 
 #include <unistd.h>
 
+#include <mutex>
+#include <condition_variable>
+#include <queue>
+
+
+struct draw_cmd_packet {
+    void hton()
+    {
+        type_n = htonl(type);
+        radius_n = htonl(radius);
+        x_n = htonl(x);
+        y_n = htonl(y);
+        color_n = htonl(color);
+    }
+
+    uint8_t* get_start_n()
+    {
+        return (uint8_t*)(&(this->type_n));
+    }
+
+    uint32_t type;
+    uint32_t radius;
+    uint32_t x;
+    uint32_t y;
+    uint32_t color;
+
+    uint32_t type_n;
+    uint32_t radius_n;
+    uint32_t x_n;
+    uint32_t y_n;
+    uint32_t color_n;
+
+    static constexpr size_t needed_buff_size = 20;
+};
+
+std::mutex m;
+std::condition_variable cv;
+// TODO queue of unique_ptr to to_send
+std::queue<draw_cmd_packet> to_send;
+
 int circle_packet_size = 20;
 int circle_packet_type = 1;
+
+void send_func(int new_fd)
+{
+    draw_cmd_packet curr_cmd;
+    while (1) {
+        // check condition
+        std::unique_lock<std::mutex> lock(m);
+        cv.wait(lock, []{ return !to_send.empty(); });
+
+        curr_cmd = to_send.front();
+        to_send.pop();
+
+        lock.unlock();
+
+        int bytesSent = send(new_fd, (uint8_t*)&curr_cmd, draw_cmd_packet::needed_buff_size, 0);
+        (void)bytesSent;
+    }
+}
 
 /**
  * @brief enqueue a drawing packet to be send out on the socked
  */
-void enqueueSend(uint32_t type, uint32_t radius, uint32_t x, uint32_t y, uint32_t color)
+void enqueueSend(draw_cmd_packet draw_cmd)
 {
+    draw_cmd.hton();
 
+    // enqueue, then another thread dequeues
+    std::unique_lock<std::mutex> lock(m);
+    to_send.push(draw_cmd);
+    lock.unlock();
+    cv.notify_one();
 }
 
-void send_func(int new_fd)
+void cmd_line_send_func()
 {
-    std::cout  << "enter circle data: [radius] [x] [y] [color]" << std::endl;
+    std::cout  << "enter draw cmd data: [cmd] [radius] [x] [y] [color]" << std::endl;
 
-    uint32_t type = circle_packet_type;
-    uint32_t typeN = htonl(type);
     uint32_t infoArray[5]; // type + radius, x, y, color;
-    uint32_t networkArray[5]; // type + radiusN, xN, yN, colorN;
-    networkArray[0] = typeN;
 
-    uint8_t buffer[circle_packet_size]; // four bytes for each of the four things + 4 for a type
     std::string line;
     std::string token;
     while (1) {
+        // TODO use getopt
         getline(std::cin, line);
 
         std::istringstream iss(line);
 
         int i = 1;
         while (getline(iss, token, ' ')) {
-            if (i > 4) { std::cout << "uh oh!" << std::endl; /*return 7;*/ }
+            if (i > 5) { std::cout << "uh oh!" << std::endl; /*return 7;*/ }
             if (token.find("0x") == 0) {
                 infoArray[i] = strtol(token.c_str(), NULL, 16);
             } else {
@@ -54,39 +114,25 @@ void send_func(int new_fd)
             i++;
         }
 
-        for (int i = 0; i < 4; i++) {
-            networkArray[i + 1] = htonl(infoArray[i + 1]);
-        }
-
-        for (int i = 0; i < 5; i++) {
-            int startIndex = i * 4;
-            buffer[startIndex++] = networkArray[i] & 0xff;
-            buffer[startIndex++] = (networkArray[i] & 0xff00) >> 8;
-            buffer[startIndex++] = (networkArray[i] & 0xff0000) >> 16;
-            buffer[startIndex++] = (networkArray[i] & 0xff000000) >> 24;
-        }
-
-        int bytesSent = send(new_fd, buffer, circle_packet_size, 0);
-        (void)bytesSent;
+        i = 0;
+        enqueueSend({infoArray[i], infoArray[++i], infoArray[++i], infoArray[++i], infoArray[++i]});
     }
 }
 
 void recv_func(int new_fd)
 {
-    uint32_t buffLen = 256;
-    uint8_t buffer[buffLen];
+    uint8_t buffer[draw_cmd_packet::needed_buff_size];
 
-    uint32_t type; // continue by modulatiing the send functionality,
+    uint32_t type;
     uint32_t radius;
     uint32_t x;
     uint32_t y;
     uint32_t color;
 
-    // continue by modulatiing the send functionality,
     while (1) {
-        int num_bytes = recv(new_fd, buffer, buffLen, 0);
+        unsigned int num_bytes = recv(new_fd, buffer, draw_cmd_packet::needed_buff_size, 0);
 
-        if (num_bytes < circle_packet_size) {
+        if (num_bytes < draw_cmd_packet::needed_buff_size) {
             std::cout  << "invalid packet size" << std::endl;
             continue;
         }
@@ -100,7 +146,7 @@ void recv_func(int new_fd)
 
         // manipulate(type, radius, x, y, color);
 
-        enqueueSend(type, radius, x, y, color);
+        enqueueSend({type, radius, x, y, color});
     }
 }
 
@@ -185,8 +231,11 @@ int main(int argc, char* argv[])
 
     // ready to communicate on socket descriptor new_fd!
 
-    // spawn sender
+    // spawn queue driven sender thread
     std::thread sender(&send_func, new_fd);
+
+    // spawn cmd line sender
+    std::thread cmd_line_sender(&cmd_line_send_func);
 
     // spawn receiver
     std::thread receiver(&recv_func, new_fd);
