@@ -14,17 +14,20 @@
 
 #include <unistd.h>
 
+int circle_packet_size = 20;
+int circle_packet_type = 1;
+
 void send_func(int new_fd)
 {
     std::cout  << "enter circle data: [radius] [x] [y] [color]" << std::endl;
 
-    uint32_t type = 1;
+    uint32_t type = circle_packet_type;
     uint32_t typeN = htonl(type);
     uint32_t infoArray[5]; // type + radius, x, y, color;
     uint32_t networkArray[5]; // type + radiusN, xN, yN, colorN;
     networkArray[0] = typeN;
 
-    uint8_t buffer[20]; // four bytes for each of the four things + 4 for a type
+    uint8_t buffer[circle_packet_size]; // four bytes for each of the four things + 4 for a type
     std::string line;
     std::string token;
     while (1) {
@@ -55,9 +58,50 @@ void send_func(int new_fd)
             buffer[startIndex++] = (networkArray[i] & 0xff000000) >> 24;
         }
 
-        int bytesSent = send(new_fd, buffer, 20, 0);
+        int bytesSent = send(new_fd, buffer, circle_packet_size, 0);
         (void)bytesSent;
     }
+}
+
+void recv_func(int new_fd)
+{
+    buffLen = 256;
+    uint8_t buffer[buffLen];
+
+    uint32_t type; // continue by modulatiing the send functionality,
+    uint32_t radius;
+    uint32_t x;
+    uint32_t y;
+    uint32_t color;
+
+    // continue by modulatiing the send functionality,
+    while (1) {
+        int num_bytes = recv(new_fd, buff, buffLen, 0);
+
+        if (num_bytes < circle_packet_size) {
+            std::cout  << "invalid packet size" << std::endl;
+            continue;
+        }
+
+        uint32_t uintsRead = 0;
+        type = ntohl((uint32_t)buffer[uintsRead * sizeof(uint32_t)]);
+        radius = ntohl((uint32_t)buffer[++uintsRead * sizeof(uint32_t)]);
+        x = ntohl((uint32_t)buffer[++uintsRead * sizeof(uint32_t)]);
+        y = ntohl((uint32_t)buffer[++uintsRead * sizeof(uint32_t)]);
+        color = ntohl((uint32_t)buffer[++uintsRead * sizeof(uint32_t)]);
+
+        // manipulate(type, radius, x, y, color);
+
+        send(type, radius, x, y, color);
+    }
+}
+
+/**
+ * @brief enqueue a drawing packet to be send out on the socked
+ */
+void send(uint32_t type, uint32_t radius, uint32_t x, uint32_t y, uint32_t color)
+{
+
 }
 
 int main(int argc, char* argv[])
@@ -140,7 +184,12 @@ int main(int argc, char* argv[])
     }
 
     // ready to communicate on socket descriptor new_fd!
+
+    // spawn sender
     std::thread sender(&send_func, new_fd);
+
+    // spawn receiver
+    std::thread sender(&recv_func, new_fd);
 
     while (1) {
         // wait to get canceled
