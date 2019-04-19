@@ -17,6 +17,14 @@
 int circle_packet_size = 20;
 int circle_packet_type = 1;
 
+/**
+ * @brief enqueue a drawing packet to be send out on the socked
+ */
+void enqueueSend(uint32_t type, uint32_t radius, uint32_t x, uint32_t y, uint32_t color)
+{
+
+}
+
 void send_func(int new_fd)
 {
     std::cout  << "enter circle data: [radius] [x] [y] [color]" << std::endl;
@@ -65,7 +73,7 @@ void send_func(int new_fd)
 
 void recv_func(int new_fd)
 {
-    buffLen = 256;
+    uint32_t buffLen = 256;
     uint8_t buffer[buffLen];
 
     uint32_t type; // continue by modulatiing the send functionality,
@@ -76,7 +84,7 @@ void recv_func(int new_fd)
 
     // continue by modulatiing the send functionality,
     while (1) {
-        int num_bytes = recv(new_fd, buff, buffLen, 0);
+        int num_bytes = recv(new_fd, buffer, buffLen, 0);
 
         if (num_bytes < circle_packet_size) {
             std::cout  << "invalid packet size" << std::endl;
@@ -92,16 +100,8 @@ void recv_func(int new_fd)
 
         // manipulate(type, radius, x, y, color);
 
-        send(type, radius, x, y, color);
+        enqueueSend(type, radius, x, y, color);
     }
-}
-
-/**
- * @brief enqueue a drawing packet to be send out on the socked
- */
-void send(uint32_t type, uint32_t radius, uint32_t x, uint32_t y, uint32_t color)
-{
-
 }
 
 int main(int argc, char* argv[])
@@ -189,7 +189,7 @@ int main(int argc, char* argv[])
     std::thread sender(&send_func, new_fd);
 
     // spawn receiver
-    std::thread sender(&recv_func, new_fd);
+    std::thread receiver(&recv_func, new_fd);
 
     while (1) {
         // wait to get canceled
