@@ -17,9 +17,16 @@
 #include <mutex>
 #include <condition_variable>
 #include <queue>
+#include <memory>
 
 
 struct draw_cmd_packet {
+    // Keep changing to unique ptr
+    draw_cmd_packet(uint32_t type_, uint32_t radius_, uint32_t x_, uint32_t y_, uint32_t color_) :
+        type(type_), radius(radius_), x(x_), y(y_), color(color_)
+    {
+    }
+
     void hton()
     {
         type_n = htonl(type);
@@ -29,7 +36,7 @@ struct draw_cmd_packet {
         color_n = htonl(color);
     }
 
-    uint8_t* get_start_n()
+    uint8_t* get_network_buff_start()
     {
         return (uint8_t*)(&(this->type_n));
     }
@@ -51,26 +58,25 @@ struct draw_cmd_packet {
 
 std::mutex m;
 std::condition_variable cv;
-// TODO queue of unique_ptr to to_send
-std::queue<draw_cmd_packet> to_send;
+std::queue<std::unique_ptr<draw_cmd_packet>> to_send;
 
 int circle_packet_size = 20;
 int circle_packet_type = 1;
 
 void send_func(int new_fd)
 {
-    draw_cmd_packet curr_cmd;
+    std::unique_ptr<draw_cmd_packet> curr_cmd;
     while (1) {
         // check condition
         std::unique_lock<std::mutex> lock(m);
         cv.wait(lock, []{ return !to_send.empty(); });
 
-        curr_cmd = to_send.front();
+        curr_cmd = std::move(to_send.front());
         to_send.pop();
 
         lock.unlock();
 
-        int bytesSent = send(new_fd, (uint8_t*)&curr_cmd, draw_cmd_packet::needed_buff_size, 0);
+        int bytesSent = send(new_fd, curr_cmd->get_network_buff_start(), draw_cmd_packet::needed_buff_size, 0);
         (void)bytesSent;
     }
 }
@@ -78,13 +84,13 @@ void send_func(int new_fd)
 /**
  * @brief enqueue a drawing packet to be send out on the socked
  */
-void enqueueSend(draw_cmd_packet draw_cmd)
+void enqueueSend(std::unique_ptr<draw_cmd_packet> draw_cmd)
 {
-    draw_cmd.hton();
+    draw_cmd->hton();
 
     // enqueue, then another thread dequeues
     std::unique_lock<std::mutex> lock(m);
-    to_send.push(draw_cmd);
+    to_send.push(std::move(draw_cmd));
     lock.unlock();
     cv.notify_one();
 }
@@ -114,8 +120,8 @@ void cmd_line_send_func()
             i++;
         }
 
-        i = 0;
-        enqueueSend({infoArray[i], infoArray[++i], infoArray[++i], infoArray[++i], infoArray[++i]});
+        auto cmd = std::make_unique<draw_cmd_packet>(infoArray[0], infoArray[1], infoArray[2], infoArray[3], infoArray[4]);
+        enqueueSend(std::move(cmd));
     }
 }
 
@@ -146,7 +152,8 @@ void recv_func(int new_fd)
 
         // manipulate(type, radius, x, y, color);
 
-        enqueueSend({type, radius, x, y, color});
+        auto cmd = std::make_unique<draw_cmd_packet>(type, radius, x, y, color);
+        enqueueSend(std::move(cmd));
     }
 }
 
@@ -242,6 +249,7 @@ int main(int argc, char* argv[])
 
     while (1) {
         // wait to get canceled
+        // probably shouldn't spin wait...
     }
 
     close(sockFd);
