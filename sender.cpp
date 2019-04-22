@@ -19,53 +19,18 @@
 #include <queue>
 #include <memory>
 
-
-struct draw_cmd_packet {
-    // Keep changing to unique ptr
-    draw_cmd_packet(uint32_t type_, uint32_t radius_, uint32_t x_, uint32_t y_, uint32_t color_) :
-        type(type_), radius(radius_), x(x_), y(y_), color(color_)
-    {
-    }
-
-    void hton()
-    {
-        type_n = htonl(type);
-        radius_n = htonl(radius);
-        x_n = htonl(x);
-        y_n = htonl(y);
-        color_n = htonl(color);
-    }
-
-    uint8_t* get_network_buff_start()
-    {
-        return (uint8_t*)(&(this->type_n));
-    }
-
-    uint32_t type;
-    uint32_t radius;
-    uint32_t x;
-    uint32_t y;
-    uint32_t color;
-
-    uint32_t type_n;
-    uint32_t radius_n;
-    uint32_t x_n;
-    uint32_t y_n;
-    uint32_t color_n;
-
-    static constexpr size_t needed_buff_size = 20;
-};
+#include <draw_cmd.h>
 
 std::mutex m;
 std::condition_variable cv;
-std::queue<std::unique_ptr<draw_cmd_packet>> to_send;
+std::queue<std::unique_ptr<draw_cmd>> to_send;
 
 int circle_packet_size = 20;
 int circle_packet_type = 1;
 
 void send_func(int new_fd)
 {
-    std::unique_ptr<draw_cmd_packet> curr_cmd;
+    std::unique_ptr<draw_cmd> curr_cmd;
     while (1) {
         // check condition
         std::unique_lock<std::mutex> lock(m);
@@ -76,7 +41,7 @@ void send_func(int new_fd)
 
         lock.unlock();
 
-        int bytesSent = send(new_fd, curr_cmd->get_network_buff_start(), draw_cmd_packet::needed_buff_size, 0);
+        int bytesSent = send(new_fd, curr_cmd->get_network_buff_start(), draw_cmd::needed_buff_size, 0);
         (void)bytesSent;
     }
 }
@@ -84,7 +49,7 @@ void send_func(int new_fd)
 /**
  * @brief enqueue a drawing packet to be send out on the socked
  */
-void enqueueSend(std::unique_ptr<draw_cmd_packet> draw_cmd)
+void enqueueSend(std::unique_ptr<draw_cmd> draw_cmd)
 {
     draw_cmd->hton();
 
@@ -97,7 +62,7 @@ void enqueueSend(std::unique_ptr<draw_cmd_packet> draw_cmd)
 
 void cmd_line_send_func()
 {
-    std::cout  << "enter draw cmd data: [cmd] [radius] [x] [y] [color]" << std::endl;
+    std::cout << "enter draw cmd data: [cmd] [radius] [x] [y] [color]" << std::endl;
 
     uint32_t infoArray[5]; // type + radius, x, y, color;
 
@@ -120,14 +85,14 @@ void cmd_line_send_func()
             i++;
         }
 
-        auto cmd = std::make_unique<draw_cmd_packet>(infoArray[0], infoArray[1], infoArray[2], infoArray[3], infoArray[4]);
+        auto cmd = std::make_unique<draw_cmd>(infoArray[0], infoArray[1], infoArray[2], infoArray[3], infoArray[4]);
         enqueueSend(std::move(cmd));
     }
 }
 
 void recv_func(int new_fd)
 {
-    uint8_t buffer[draw_cmd_packet::needed_buff_size];
+    uint8_t buffer[draw_cmd::needed_buff_size];
 
     uint32_t type;
     uint32_t radius;
@@ -136,9 +101,9 @@ void recv_func(int new_fd)
     uint32_t color;
 
     while (1) {
-        unsigned int num_bytes = recv(new_fd, buffer, draw_cmd_packet::needed_buff_size, 0);
+        unsigned int num_bytes = recv(new_fd, buffer, draw_cmd::needed_buff_size, 0);
 
-        if (num_bytes < draw_cmd_packet::needed_buff_size) {
+        if (num_bytes < draw_cmd::needed_buff_size) {
             std::cout  << "invalid packet size" << std::endl;
             continue;
         }
@@ -152,7 +117,7 @@ void recv_func(int new_fd)
 
         // manipulate(type, radius, x, y, color);
 
-        auto cmd = std::make_unique<draw_cmd_packet>(type, radius, x, y, color);
+        auto cmd = std::make_unique<draw_cmd>(type, radius, x, y, color);
         enqueueSend(std::move(cmd));
     }
 }
