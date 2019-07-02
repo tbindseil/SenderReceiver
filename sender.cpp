@@ -20,6 +20,7 @@
 #include <memory>
 
 #include <draw_cmd.h>
+#include <socket_wrapper.h>
 
 std::mutex m;
 std::condition_variable cv;
@@ -28,7 +29,7 @@ std::queue<std::unique_ptr<draw_cmd>> to_send;
 int circle_packet_size = 20;
 int circle_packet_type = 1;
 
-void send_func(std::shared_ptr<socket> new_sock)
+void send_func(std::shared_ptr<socket_wrapper> new_sock)
 {
     std::unique_ptr<draw_cmd> curr_cmd;
     while (1) {
@@ -90,7 +91,7 @@ void cmd_line_send_func()
     }
 }
 
-void recv_func(std::shared_ptr<socket> new_sock)
+void recv_func(std::shared_ptr<socket_wrapper> new_sock)
 {
     uint8_t buffer[draw_cmd::needed_buff_size];
 
@@ -130,13 +131,11 @@ int main(int argc, char* argv[])
     }
 
     int status;
-    socket listen_sock(argv[1], argv[0]);
+    socket_wrapper listen_sock(argv[1], argv[0]);
 
     if ((status = listen_sock.bind()) < 0) {
         std::cout << "didn't bind socket and errno is " << errno << std::endl;
         return 4;
-    } else {
-        break;
     }
 
     int backlog = 1;
@@ -145,7 +144,7 @@ int main(int argc, char* argv[])
         return 5;
     }
 
-    std::shared_ptr<socket> new_sock = std::make_shared<socket>(listen_sock.accept());
+    std::shared_ptr<socket_wrapper> new_sock = std::make_shared<socket_wrapper>(listen_sock.accept());
 
     // once a new fd is obtained, how to populate the socket objects stuff
     if (new_sock->get_fd() < 1) {
@@ -168,7 +167,7 @@ int main(int argc, char* argv[])
     }
 
     listen_sock.close();
-    new_sock.close();
+    new_sock->close();
 
     return 0;
 }

@@ -10,6 +10,7 @@
 #include <arpa/inet.h>
 
 #include <unistd.h>
+#include <socket_wrapper.h>
 
 int main(int argc, char* argv[])
 {
@@ -19,7 +20,7 @@ int main(int argc, char* argv[])
     }
 
     int status;
-    socket socket_obj(argv[1], argv[0]);
+    socket_wrapper socket_obj(argv[1], argv[0]);
 
     int i;
     for (i = 0; i < 10; i++) {
@@ -38,20 +39,20 @@ int main(int argc, char* argv[])
 
 
     const uint8_t buff_size = 100;
-    char buff[buff_size];
+    uint8_t buff[buff_size];
     buff[0] = '\0';
     while (1) {
         // receive data
         int num_bytes = socket_obj.recv(buff, buff_size, 0);
-        if (numBytes < 0) {
+        if (num_bytes < 0) {
             std::cout << "error with recv errno is " << strerror(errno) << std::endl;
             return 5;
         }
-        buff[(numBytes + 1) % buf_size] = '\0';
+        buff[(num_bytes + 1) % buff_size] = '\0';
 
         std::cout << "got msg:" << buff << std::endl;
 
-        if (strcmp(buff, "end") == 0) {
+        if (strcmp((const char*)buff, "end") == 0) {
             break;
         }
     }

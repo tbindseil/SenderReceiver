@@ -20,5 +20,3 @@ uint8_t* draw_cmd::get_network_buff_start()
 {
     return (uint8_t*)(&(this->_type_n));
 }
-
-
