@@ -124,66 +124,23 @@ void recv_func(int new_fd)
 
 int main(int argc, char* argv[])
 {
-    unsigned int n = std::thread::hardware_concurrency();
-    std::cout << n << " concurrent threads are supported.\n";
-
-    struct addrinfo hints, *res, *p;
-    int status;
-    char ipstr[INET6_ADDRSTRLEN];
-
     if (argc != 3) {
         fprintf(stderr,"usage: sender hostname portnumstr\n");
         return 1;
     }
 
-    // clear and prepare hints
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_UNSPEC; // AF_INET or AF_INET6 to force version
-    hints.ai_socktype = SOCK_STREAM;
+    int status;
+    socket socket_obj(argv[1], argv[0]);
 
-    if ((status = getaddrinfo(argv[1], argv[2], &hints, &res)) != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
-        return 2;
-    }
-
-    printf("IP addresses for host %s on port %s:\n\n", argv[1], argv[2]);
-
-    int sockFd;
-    for (p = res; p != NULL; p = p->ai_next) {
-        void *addr;
-        std::string str;
-
-        // get the pointer to the address itself,
-        // different fields in IPv4 and IPv6:
-        if (p->ai_family == AF_INET) { // IPv4
-            struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
-            addr = &(ipv4->sin_addr);
-            str = "IPv4";
-        } else { // IPv6
-            struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)p->ai_addr;
-            addr = &(ipv6->sin6_addr);
-            str = "IPv6";
-        }
-
-        // convert the IP to a string and print it:
-        inet_ntop(p->ai_family, addr, ipstr, sizeof ipstr);
-        printf("  %s: %s\n", str.c_str(), ipstr);
-
-        if ((sockFd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) {
-            std::cout << "didn't make socket and errno is " << errno << std::endl;
-            return 3;
-        } else {
-            if ((status = bind(sockFd, p->ai_addr, p->ai_addrlen)) < 0) {
-                std::cout << "didn't bind socket and errno is " << errno << std::endl;
-                return 4;
-            } else {
-                break;
-            }
-        }
+    if ((status = bind(socket_obj.get_fd(), p->ai_addr, p->ai_addrlen)) < 0) {
+        std::cout << "didn't bind socket and errno is " << errno << std::endl;
+        return 4;
+    } else {
+        break;
     }
 
     int backlog = 1;
-    if ((status = listen(sockFd, backlog)) != 0) {
+    if ((status = listen(socket_obj.get_fd(), backlog)) != 0) {
         std::cout << "didn't listen socket and errno is " << errno << std::endl;
         return 5;
     }
@@ -195,7 +152,7 @@ int main(int argc, char* argv[])
     // now accept an incoming connection:
 
     addr_size = sizeof their_addr;
-    new_fd = accept(sockFd, (struct sockaddr *)&their_addr, &addr_size);
+    new_fd = accept(socket_obj.get_fd(), (struct sockaddr *)&their_addr, &addr_size);
     if (new_fd < 1) {
         std::cout << "didn't accept and errno is " << errno << std::endl;
         return 6;
@@ -217,7 +174,7 @@ int main(int argc, char* argv[])
         // probably shouldn't spin wait...
     }
 
-    close(sockFd);
+    close(socket_obj.get_fd());
     close(new_fd);
     freeaddrinfo(res); // free the linked list
 

@@ -6,6 +6,9 @@ class draw_cmd {
 public:
     draw_cmd(uint32_t type, uint32_t radius, uint32_t x, uint32_t y, uint32_t color);
 
+    /**
+     * @breif populate the network byte ordered member variables
+     */
     void hton();
 
     uint8_t* get_network_buff_start();
