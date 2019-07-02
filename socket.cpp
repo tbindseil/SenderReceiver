@@ -1,8 +1,6 @@
 #include <socket.h>
 
 socket::socket(const std::string& host, const std::string& port) :
-    _host(host),
-    _port(port),
     _addr_info(NULL)
 {
     // save *p and note that socket creates a socket but doesn't bind so no biggie
@@ -13,7 +11,7 @@ socket::socket(const std::string& host, const std::string& port) :
     hints.ai_family = AF_UNSPEC; // AF_INET or AF_INET6 to force version
     hints.ai_socktype = SOCK_STREAM;
 
-    if ((status = getaddrinfo(_host.c_str(), _port.c_str(), &hints, &res)) != 0) {
+    if ((status = getaddrinfo(host.c_str(), port.c_str(), &hints, &res)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
     }
 
@@ -46,14 +44,67 @@ socket::socket(const std::string& host, const std::string& port) :
     }
 }
 
-socket::socket() :
-    _host(""),
-    _port(""),
+socket::socket(int accepted_socket_fd) :
+    _fd(accepted_socket_fd),
     _addr_info(NULL)
 {
+}
 
+socket::socket(const socket& toCopy) :
+    _fd(toCopy._fd),
+    _addr_info(toCopy._addr_info)
+{
+    for (int i = 0; i < INET6_ADDRSTRLEN; i++)
+    {
+        _ipstr[i] = toCopy._ipstr[i];
+    }
 }
 
 socket::~socket()
 {
+    if (_addr_info != NULL)
+    {
+        freeaddrinfo(_addr_info); // free the linked list
+    }
+}
+
+int socket::bind()
+{
+    return bind(_fd, _addr_info->ad_addr, _addr_info->ai_addrlen);
+}
+
+int socket::connect()
+{
+    return connect(_fd, _addr_info->ai_addr, _addr_info->ai_addrlen);
+}
+
+int socket::listen(int backlog)
+{
+    return listen(_fd, backlog);
+}
+
+int socket::accept()
+{
+    struct sockaddr_storage their_addr;
+    socklen_t addr_size;
+    int new_fd;
+
+    addr_size = sizeof their_addr;
+    new_fd = accept(_fd, (struct sockaddr *)&their_addr, &addr_size);
+    return socket(new_fd);
+}
+
+int socket::recv(char* buff, int buff_size, int flags)
+{
+    return recv(_fd, buff, buff_size, flags);
+}
+
+int socket::send(char* buff, int buff_size, int flags)
+{
+    return send(_fd, buff, buff_size, flags);
+}
+
+void socket::close()
+{
+    close(_fd);
 }

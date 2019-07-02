@@ -28,7 +28,7 @@ std::queue<std::unique_ptr<draw_cmd>> to_send;
 int circle_packet_size = 20;
 int circle_packet_type = 1;
 
-void send_func(int new_fd)
+void send_func(std::shared_ptr<socket> new_sock)
 {
     std::unique_ptr<draw_cmd> curr_cmd;
     while (1) {
@@ -41,7 +41,7 @@ void send_func(int new_fd)
 
         lock.unlock();
 
-        int bytesSent = send(new_fd, curr_cmd->get_network_buff_start(), draw_cmd::needed_buff_size, 0);
+        int bytesSent = new_sock->send(curr_cmd->get_network_buff_start(), draw_cmd::needed_buff_size, 0);
         (void)bytesSent;
     }
 }
@@ -90,7 +90,7 @@ void cmd_line_send_func()
     }
 }
 
-void recv_func(int new_fd)
+void recv_func(std::shared_ptr<socket> new_sock)
 {
     uint8_t buffer[draw_cmd::needed_buff_size];
 
@@ -101,7 +101,7 @@ void recv_func(int new_fd)
     uint32_t color;
 
     while (1) {
-        unsigned int num_bytes = recv(new_fd, buffer, draw_cmd::needed_buff_size, 0);
+        unsigned int num_bytes = new_sock->recv(buffer, draw_cmd::needed_buff_size, 0);
 
         if (num_bytes < draw_cmd::needed_buff_size) {
             std::cout  << "invalid packet size" << std::endl;
@@ -130,9 +130,9 @@ int main(int argc, char* argv[])
     }
 
     int status;
-    socket socket_obj(argv[1], argv[0]);
+    socket listen_sock(argv[1], argv[0]);
 
-    if ((status = bind(socket_obj.get_fd(), p->ai_addr, p->ai_addrlen)) < 0) {
+    if ((status = listen_sock.bind()) < 0) {
         std::cout << "didn't bind socket and errno is " << errno << std::endl;
         return 4;
     } else {
@@ -140,43 +140,35 @@ int main(int argc, char* argv[])
     }
 
     int backlog = 1;
-    if ((status = listen(socket_obj.get_fd(), backlog)) != 0) {
+    if ((status = listen_sock.listen(backlog)) != 0) {
         std::cout << "didn't listen socket and errno is " << errno << std::endl;
         return 5;
     }
 
-    struct sockaddr_storage their_addr;
-    socklen_t addr_size;
-    int new_fd;
+    std::shared_ptr<socket> new_sock = std::make_shared<socket>(listen_sock.accept());
 
-    // now accept an incoming connection:
-
-    addr_size = sizeof their_addr;
-    new_fd = accept(socket_obj.get_fd(), (struct sockaddr *)&their_addr, &addr_size);
-    if (new_fd < 1) {
+    // once a new fd is obtained, how to populate the socket objects stuff
+    if (new_sock->get_fd() < 1) {
         std::cout << "didn't accept and errno is " << errno << std::endl;
         return 6;
     }
 
-    // ready to communicate on socket descriptor new_fd!
-
     // spawn queue driven sender thread
-    std::thread sender(&send_func, new_fd);
+    std::thread sender(&send_func, new_sock);
 
     // spawn cmd line sender
     std::thread cmd_line_sender(&cmd_line_send_func);
 
     // spawn receiver
-    std::thread receiver(&recv_func, new_fd);
+    std::thread receiver(&recv_func, new_sock);
 
     while (1) {
         // wait to get canceled
         // probably shouldn't spin wait...
     }
 
-    close(socket_obj.get_fd());
-    close(new_fd);
-    freeaddrinfo(res); // free the linked list
+    listen_sock.close();
+    new_sock.close();
 
     return 0;
 }

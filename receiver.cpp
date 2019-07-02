@@ -23,7 +23,7 @@ int main(int argc, char* argv[])
 
     int i;
     for (i = 0; i < 10; i++) {
-        if ((status = connect(socket_obj.get_fd(), p->ai_addr, p->ai_addrlen)) < 0) {
+        if ((status = socket_obj.connect()) < 0) {
             std::cout << "didn't connect socket and errno is " << strerror(errno) << std::endl;
         } else {
             std::cout << "connect socket" << std::endl;
@@ -36,25 +36,25 @@ int main(int argc, char* argv[])
         return 4;
     }
 
-    char bufAsStr[100];
-    bufAsStr[0] = '\0';
+
+    const uint8_t buff_size = 100;
+    char buff[buff_size];
+    buff[0] = '\0';
     while (1) {
         // receive data
-        int numBytes = recv(socket_obj.get_fd(), bufAsStr, 99, 0);
+        int num_bytes = socket_obj.recv(buff, buff_size, 0);
         if (numBytes < 0) {
             std::cout << "error with recv errno is " << strerror(errno) << std::endl;
             return 5;
         }
-        bufAsStr[numBytes] = '\0';
+        buff[(numBytes + 1) % buf_size] = '\0';
 
-        std::cout << "got msg:" << bufAsStr << std::endl;
+        std::cout << "got msg:" << buff << std::endl;
 
-        if (strcmp(bufAsStr, "end") == 0) {
+        if (strcmp(buff, "end") == 0) {
             break;
         }
     }
-
-    freeaddrinfo(res); // free the linked list
 
     return 0;
 }
