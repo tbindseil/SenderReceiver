@@ -20,7 +20,7 @@ int main(int argc, char* argv[])
     }
 
     int status;
-    socket_wrapper socket_obj(argv[1], argv[0]);
+    socket_wrapper socket_obj(argv[1], argv[2]);
 
     int i;
     for (i = 0; i < 10; i++) {

@@ -131,7 +131,7 @@ int main(int argc, char* argv[])
     }
 
     int status;
-    socket_wrapper listen_sock(argv[1], argv[0]);
+    socket_wrapper listen_sock(argv[1], argv[2]);
 
     if ((status = listen_sock.bind()) < 0) {
         std::cout << "didn't bind socket and errno is " << errno << std::endl;
